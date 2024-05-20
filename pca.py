@@ -1,62 +1,100 @@
+# Calcula Componentes Prinipales
 
 # Analiza base de datos SNP Holando
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 
-# Read the "cromosomas" XLSX files into a DataFrame
-df = pd.read_excel('cromosomas.xlsx', na_values='Missing')
-
-# Agregar tres columnas ATAT, ATGC y GCGC
-tipo_GC = ["G", "C"]
-
-# Cuando solo "A1" tiene un valor y "A2" esta vacia,
-# quiere decir que ambas valen A1
-df['A2'].fillna(df['A1'], inplace=True)
-
-# Calculate GC content using vectorized operations
-df['GC_A1'] = df['A1'].isin(tipo_GC).astype(int)
-df['GC_A2'] = df['A2'].isin(tipo_GC).astype(int)
-df['GC_TOTAL'] = df['GC_A1'] + df['GC_A2']
-
-# Calculate GC frequency per locus
-df['frec_GC'] = df['GC_TOTAL'] / 2
-
-# Drop chromosome MT
-df = df.drop(df[df['Cromosoma'] == "MT"].index)
-
-# Ensure 'Cromosoma' is treated as a categorical variable
-df['Cromosoma'] = df['Cromosoma'].astype('category')
+# Read the XLSX files into a DataFrame
+df = pd.read_excel('genotipos_2.xlsx', na_values='Missing')
+df = df.drop(columns=df.columns[0])
 print(df)
 
-# Now, when you group by 'Cromosoma', pandas will maintain the categorical data type
-grouped = df.groupby('Cromosoma')['frec_GC'].agg(['mean', 'std']).reset_index()
-# Display df
-print(grouped)
+###############################################
+import pandas as pd
 
-# Plotting
-plt.figure(figsize=(10, 6))
+# Assuming 'df' is your original DataFrame with 24 columns of "X/Y" type values
 
-# Create a point plot with error bars for standard deviation
-# The 'order' parameter ensures that the categories are plotted in the order they appear in the data
-sns.pointplot(x='Cromosoma', y='mean', data=grouped, capsize=.2, join=False, order=grouped['Cromosoma'])
+# Define a function to apply to each row
+def assign_values(row):
+    # Create a dictionary to map the patterns to the values
+    value_map = {
+        'A/A': 0, 'A/T': 0, 'T/A': 0, 'T/T': 0,
+        'A/G': 1, 'A/C': 1, 'T/G': 1, 'T/C': 1,
+        'G/G': 2, 'G/C': 2, 'C/G': 2, 'C/C': 2
+    }
+    
+    # Initialize a list to store the new values
+    new_values = []
+    
+    # Iterate over each cell in the row
+    for cell in row:
+        # Get the value from the map, default to 5 if the pattern is not found
+        new_values.append(value_map.get(cell, 5))
+    
+    return new_values
 
-# Optionally, you can add the standard deviation as error bars
-plt.errorbar(x=np.arange(len(grouped['Cromosoma'])), y=grouped['mean'], yerr=grouped['std'], fmt='none', c='k', capsize=5)
+# Apply the function to each row and create new columns
+new_columns = df.apply(lambda row: assign_values(row), axis=1, result_type='expand')
 
-# Improve plot aesthetics
-plt.xlabel('Cromosoma')
-plt.ylabel('Frecuencia G+C')
-plt.title('Frecuencia G+C por Cromosoma')
-plt.xticks(rotation=90)  # Rotate x-axis labels if they overlap
-plt.tight_layout()  # Adjust layout to prevent clipping of labels
+# Set the column names for the new columns
+new_column_names = [f'b{i}' for i in range(24)]
+for i, column_name in enumerate(new_column_names):
+    df[column_name] = new_columns[i]
+#print(df)
 
-# Display the plot
+# PCA analysis
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+import pandas as pd
+
+# Assuming 'df' is your DataFrame and it has 48 columns in total
+
+# Select the last 24 columns for PCA
+data_for_pca = df.iloc[:, -24:]
+
+# Standardize the data
+scaler = StandardScaler()
+data_scaled = scaler.fit_transform(data_for_pca)
+
+# Apply PCA
+pca = PCA(n_components=2)  # Example: Reduce to 2 principal components
+principal_components = pca.fit_transform(data_scaled)
+
+# Create a DataFrame with the principal components
+principal_df = pd.DataFrame(data=principal_components, columns=['PC1', 'PC2'])
+
+# Explained variance ratio
+print("Explained variance ratio:", pca.explained_variance_ratio_)
+
+# Add the principal components to the original DataFrame if needed
+df['PC1'] = principal_df['PC1']
+df['PC2'] = principal_df['PC2']
+
+# Visualizar PCA
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+import pandas as pd
+
+import matplotlib.pyplot as plt
+
+# Assuming 'principal_df' is the DataFrame with the principal components 'PC1' and 'PC2'
+# and 'df' is the original DataFrame with the column names
+
+# Extract the column names for labeling
+column_labels = df.columns[-24:].tolist()  # Adjust the index if needed
+
+# Create a scatter plot
+plt.figure(figsize=(10, 8))
+plt.scatter(principal_df['PC1'], principal_df['PC2'], alpha=0.5)
+
+# Label each point with the corresponding column name
+for i, label in enumerate(column_labels):
+    plt.annotate(label, (principal_df['PC1'][i], principal_df['PC2'][i]))
+
+# Set the title and labels for the axes
+plt.title('PCA Results')
+plt.xlabel('Principal Component 1')
+plt.ylabel('Principal Component 2')
+
+# Show the plot
 plt.show()
-
-# Exportar como excel
-grouped.to_excel("cromosoma_out.xlsx")
-# Exportar figura
-plt.savefig('C:/Users/Pablo/Maestria/Genetica/cromosomas.png')
-#plt.close()
